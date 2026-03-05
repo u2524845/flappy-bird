@@ -11,26 +11,139 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      width: 100vw;
       height: 100vh;
       font-family: 'Segoe UI', sans-serif;
       overflow: hidden;
+      touch-action: none;
+      user-select: none;
     }
     canvas {
       border-radius: 16px;
       box-shadow: 0 0 60px rgba(99, 179, 237, 0.3), 0 0 120px rgba(99, 179, 237, 0.1);
       display: block;
+      touch-action: none;
     }
+    #nameOverlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 8, 30, 0.88);
+      z-index: 10;
+      gap: 14px;
+    }
+    #nameOverlay h2 {
+      color: #FFD700;
+      font-size: clamp(20px, 5vw, 30px);
+      letter-spacing: 2px;
+      text-shadow: 0 0 16px #FFD700;
+      margin-bottom: 4px;
+    }
+    #nameOverlay p {
+      color: rgba(255,255,255,0.55);
+      font-size: clamp(12px, 3vw, 15px);
+      margin-top: -6px;
+    }
+    #nameInput {
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(99,179,237,0.5);
+      border-radius: 12px;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: clamp(16px, 4vw, 22px);
+      padding: 10px 20px;
+      text-align: center;
+      outline: none;
+      width: min(280px, 70vw);
+      transition: border-color 0.2s;
+    }
+    #nameInput:focus { border-color: #63B3ED; }
+    #nameInput::placeholder { color: rgba(255,255,255,0.25); }
+    #nameBtn {
+      background: linear-gradient(180deg, #48bb78, #276749);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      cursor: pointer;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: clamp(14px, 3.5vw, 18px);
+      font-weight: bold;
+      letter-spacing: 1px;
+      padding: 12px 0;
+      width: min(280px, 70vw);
+      box-shadow: 0 0 18px rgba(72,187,120,0.4);
+      transition: opacity 0.15s;
+    }
+    #nameBtn:active { opacity: 0.75; }
   </style>
 </head>
 <body>
+<div id="nameOverlay">
+  <h2>FLAPPY BIRD</h2>
+  <p>Enter your name to play</p>
+  <input id="nameInput" type="text" maxlength="14" placeholder="Your name..." autocomplete="off" spellcheck="false" />
+  <button id="nameBtn">LET'S FLY ✈</button>
+</div>
 <canvas id="game"></canvas>
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-// Responsive sizing
+// Fixed internal resolution
 const W = canvas.width  = 400;
 const H = canvas.height = 600;
+
+// Scale canvas to fit screen while preserving aspect ratio
+function resizeCanvas() {
+  const aspect = W / H;
+  const winW = window.innerWidth, winH = window.innerHeight;
+  let dw, dh;
+  if (winW / winH < aspect) {
+    dw = winW;
+    dh = winW / aspect;
+  } else {
+    dh = winH;
+    dw = winH * aspect;
+  }
+  canvas.style.width  = dw + 'px';
+  canvas.style.height = dh + 'px';
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ─── Player Name ─────────────────────────────────────────────────────────────
+let playerName = localStorage.getItem('fb_name') || '';
+const nameOverlay = document.getElementById('nameOverlay');
+const nameInput   = document.getElementById('nameInput');
+const nameBtn     = document.getElementById('nameBtn');
+
+function showNameOverlay() {
+  nameInput.value = playerName;
+  nameOverlay.style.display = 'flex';
+  setTimeout(() => nameInput.focus(), 80);
+}
+function hideNameOverlay() {
+  const v = nameInput.value.trim();
+  if (v) { playerName = v; localStorage.setItem('fb_name', v); }
+  nameOverlay.style.display = 'none';
+}
+nameBtn.addEventListener('click', hideNameOverlay);
+nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') hideNameOverlay(); });
+
+// Show overlay on load; if name already saved, still show so user can update
+showNameOverlay();
+
+// ─── Sound Toggle ─────────────────────────────────────────────────────────────
+let soundEnabled = localStorage.getItem('fb_sound') !== 'off';
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  localStorage.setItem('fb_sound', soundEnabled ? 'on' : 'off');
+}
+// Button rect for sound toggle (top-right)
+let BTN_SOUND = { x: 0, y: 0, w: 36, h: 36 };
 
 // ─── Audio (Web Audio API) ───────────────────────────────────────────────────
 const AC = new (window.AudioContext || window.webkitAudioContext)();
@@ -49,6 +162,7 @@ function playTone(freq, type, duration, vol = 0.3) {
 }
 
 function sfxFlap() {
+  if (!soundEnabled) return;
   // Quick frequency sweep: wing whoosh
   const osc = AC.createOscillator(), g = AC.createGain();
   osc.connect(g); g.connect(AC.destination);
@@ -61,6 +175,7 @@ function sfxFlap() {
 }
 
 function sfxScore() {
+  if (!soundEnabled) return;
   // Rising arpeggio: C-E-G
   [[523,0],[659,0.07],[784,0.14]].forEach(([f,t]) => {
     const osc = AC.createOscillator(), g = AC.createGain();
@@ -74,6 +189,7 @@ function sfxScore() {
 }
 
 function sfxDie() {
+  if (!soundEnabled) return;
   // Descending crunch + low thud
   const osc = AC.createOscillator(), g = AC.createGain();
   osc.connect(g); g.connect(AC.destination);
@@ -95,6 +211,7 @@ function sfxDie() {
 }
 
 function sfxCoin() {
+  if (!soundEnabled) return;
   // Bright sparkle: two fast high tones
   [[1400,0],[1900,0.06]].forEach(([f,t]) => {
     const osc = AC.createOscillator(), g = AC.createGain();
@@ -107,6 +224,7 @@ function sfxCoin() {
 }
 
 function sfxContinue() {
+  if (!soundEnabled) return;
   // Positive rising chord
   [[400,0],[500,0.08],[600,0.16],[800,0.24]].forEach(([f,t]) => {
     const osc = AC.createOscillator(), g = AC.createGain();
@@ -695,7 +813,20 @@ function drawHUD() {
   ctx.fillText(score, W/2, 60);
   ctx.shadowBlur = 0;
 
-  // Weather & level badge (top-right)
+  // Sound toggle button (top-right corner)
+  const sbx = W - 40, sby = 6, sbw = 34, sbh = 34;
+  BTN_SOUND = { x: sbx, y: sby, w: sbw, h: sbh };
+  ctx.save();
+  ctx.fillStyle = soundEnabled ? 'rgba(99,179,237,0.18)' : 'rgba(255,80,80,0.18)';
+  ctx.beginPath(); ctx.roundRect(sbx, sby, sbw, sbh, 8); ctx.fill();
+  ctx.strokeStyle = soundEnabled ? 'rgba(99,179,237,0.5)' : 'rgba(255,80,80,0.5)';
+  ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.font = '18px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(soundEnabled ? '🔊' : '🔇', sbx + sbw/2, sby + 23);
+  ctx.restore();
+
+  // Weather & level badge (below sound button)
   if (state === 'playing') {
     const th = getTheme();
     const weatherColors = { clear:'#63B3ED', cloudy:'#a0aec0', rain:'#667eea', storm:'#e53e3e' };
@@ -705,11 +836,19 @@ function drawHUD() {
     ctx.font = 'bold 12px Segoe UI';
     ctx.fillStyle = col;
     ctx.shadowColor = col; ctx.shadowBlur = 8;
-    ctx.fillText(th.name, W - 10, 20);
+    ctx.fillText(th.name, W - 10, 52);
     ctx.font = '11px Segoe UI';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.shadowBlur = 0;
-    ctx.fillText(weatherIcons[th.weather], W - 10, 34);
+    ctx.fillText(weatherIcons[th.weather], W - 10, 66);
+  }
+
+  // Player name (bottom-left above ground)
+  if (playerName) {
+    ctx.textAlign = 'left';
+    ctx.font = '12px Segoe UI';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillText(playerName, 10, H - 76);
   }
 
   // Coin counter (top-left)
@@ -768,12 +907,25 @@ function drawIdleScreen() {
     ctx.font = '16px Segoe UI';
     ctx.fillText(`Best: ${hiScore}`, W/2, H/2 + 88);
   }
+
+  // Player name display + tap to change
+  const nameY = H/2 + 118;
+  if (playerName) {
+    ctx.fillStyle = 'rgba(255,215,0,0.7)';
+    ctx.font = 'bold 14px Segoe UI';
+    ctx.fillText(`Hi, ${playerName}!`, W/2, nameY);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '11px Segoe UI';
+  ctx.fillText('Tap name to change', W/2, nameY + 18);
+
   ctx.restore();
 }
 
-// ─── Button rects (recalculated each frame via drawDeadScreen) ───────────────
-let BTN_CONTINUE = { x:0, y:0, w:0, h:0 };
-let BTN_RESTART  = { x:0, y:0, w:0, h:0 };
+// ─── Button rects (recalculated each frame via draw functions) ───────────────
+let BTN_CONTINUE  = { x:0, y:0, w:0, h:0 };
+let BTN_RESTART   = { x:0, y:0, w:0, h:0 };
+let BTN_CHANGENAME = { x: W/2-80, y: H/2+108, w:160, h:36 };
 
 function drawDeadScreen() {
   const canContinue = coins >= CONTINUE_COST;
@@ -806,8 +958,13 @@ function drawDeadScreen() {
   ctx.fillStyle = '#fc8181';
   ctx.shadowColor = '#e53e3e';
   ctx.shadowBlur = 20;
-  ctx.fillText('GAME OVER', W/2, PY + 52);
+  ctx.fillText('GAME OVER', W/2, PY + 48);
   ctx.shadowBlur = 0;
+  if (playerName) {
+    ctx.font = '13px Segoe UI';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillText(playerName, W/2, PY + 65);
+  }
 
   // Divider
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
@@ -953,6 +1110,10 @@ function jump() {
 
 function handleClick(mx, my) {
   if (AC.state === 'suspended') AC.resume();
+  // Sound toggle button (always active)
+  if (hitBtn(BTN_SOUND, mx, my)) { toggleSound(); return; }
+  // Change name on idle screen
+  if (state === 'idle' && hitBtn(BTN_CHANGENAME, mx, my)) { showNameOverlay(); return; }
   if (state === 'dead') {
     if (coins >= CONTINUE_COST && hitBtn(BTN_CONTINUE, mx, my)) {
       continueGame();
@@ -991,15 +1152,23 @@ document.addEventListener('keydown', e => {
   }
 });
 
-canvas.addEventListener('click', e => {
+function clientToCanvas(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
-  handleClick(e.clientX - r.left, e.clientY - r.top);
+  return {
+    x: (clientX - r.left) * (W / r.width),
+    y: (clientY - r.top)  * (H / r.height)
+  };
+}
+
+canvas.addEventListener('click', e => {
+  const { x, y } = clientToCanvas(e.clientX, e.clientY);
+  handleClick(x, y);
 });
 canvas.addEventListener('touchstart', e => {
   e.preventDefault();
-  const r = canvas.getBoundingClientRect();
   const t = e.touches[0];
-  handleClick(t.clientX - r.left, t.clientY - r.top);
+  const { x, y } = clientToCanvas(t.clientX, t.clientY);
+  handleClick(x, y);
 }, { passive: false });
 
 // ─── Main Loop ───────────────────────────────────────────────────────────────
